@@ -47,6 +47,23 @@ export default function Page() {
   const [selectedEmotion, setSelectedEmotion] = useState('neutral');
   const [step, setStep] = useState<'language' | 'voice' | 'emotion' | 'text'>('language');
   const [error, setError] = useState('');
+  const [isTextModified, setIsTextModified] = useState(false);
+  const [lastGeneratedText, setLastGeneratedText] = useState('');
+
+  useEffect(() => {
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    setText(newText);
+    
+    setIsTextModified(newText !== lastGeneratedText);
+  };
 
   useEffect(() => {
     const fetchVoices = async () => {
@@ -67,7 +84,7 @@ export default function Page() {
         }
       } catch (err: any) {
         setError(err.message || 'Failed to fetch voices');
-        setStep('language'); // Stay on language selection if voices fail to load
+        setStep('language');
       } finally {
         setLoadingVoices(false);
       }
@@ -78,10 +95,20 @@ export default function Page() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!isTextModified && audioUrl) {
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+        setAudioUrl('');
+      }
+
       const response = await fetch('/api/text-to-speech', {
         method: 'POST',
         headers: {
@@ -102,6 +129,8 @@ export default function Page() {
       const data = await response.blob();
       const url = URL.createObjectURL(data);
       setAudioUrl(url);
+      setLastGeneratedText(text);
+      setIsTextModified(false);
     } catch (error: any) {
       setError(error.message || 'An error occurred');
       console.error('Error:', error);
@@ -331,7 +360,7 @@ export default function Page() {
               <div className="space-y-2">
                 <SnakeBorderTextarea
                   value={text}
-                  onChange={(e) => setText(e.target.value)}
+                  onChange={handleTextChange}
                   placeholder={`Enter text in ${languages.find(l => l.code === selectedLanguage)?.name}...`}
                   rows={6}
                   required
@@ -340,12 +369,12 @@ export default function Page() {
               
               <motion.button
                 type="submit"
-                disabled={loading || !selectedVoice}
+                disabled={Boolean(loading || !selectedVoice || (!isTextModified && audioUrl))}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="w-full py-3 px-4 bg-[#ff9066] text-black rounded-lg font-medium hover:bg-[#ff7f4d] disabled:opacity-50 disabled:hover:bg-[#ff9066] transition-colors"
+                className="w-full py-3 px-6 bg-[#ff9066] text-black rounded-lg font-medium hover:bg-[#ff7f4d] disabled:opacity-50 disabled:hover:bg-[#ff9066] transition-colors"
               >
-                {loading ? 'Converting...' : 'Convert to Speech'}
+                {loading ? 'Converting...' : isTextModified ? 'Convert to Speech' : audioUrl ? 'Already Generated' : 'Convert to Speech'}
               </motion.button>
 
               <motion.button
